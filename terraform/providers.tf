@@ -7,6 +7,14 @@ terraform {
       version = "~> 1.0"
     }
   }
+
+  cloud {
+    organization = "r-potential-demo"
+
+    workspaces {
+      name = "r-potential-databricks"
+    }
+  }
 }
 
 # Workspace-level provider
