@@ -82,6 +82,16 @@ resource "databricks_grants" "project_catalog" {
     principal  = databricks_group.data_engineers.display_name
     privileges = ["USE_CATALOG"]
   }
+
+  grant {
+    principal = var.databricks_client_id
+
+    privileges = [
+      "ALL_PRIVILEGES",
+      "EXTERNAL_USE_SCHEMA",
+      "MANAGE"
+    ]
+  }
 }
 
 # Bronze: engineers can use schema and modify data
@@ -133,7 +143,8 @@ resource "databricks_grants" "monitoring" {
 # -----------------------------
 
 resource "databricks_job" "financial_pipeline" {
-  name = "r_potential_financial_pipeline"
+  name               = "r_potential_financial_pipeline"
+  performance_target = "PERFORMANCE_OPTIMIZED"
 
   task {
     task_key = "01_bronze_ingest"
@@ -183,5 +194,3 @@ resource "databricks_job" "financial_pipeline" {
     }
   }
 }
-
-
