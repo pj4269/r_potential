@@ -1,0 +1,15 @@
+# Terraform secrets/state
+terraform.tfvars
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Environment/secrets
+.env
+.env.*
+*.pem
+*.key
+plan.yml
+# Misc
+.DS_Store
+terraform/main_tf.backup
