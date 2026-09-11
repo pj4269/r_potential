@@ -13,3 +13,7 @@ plan.yml
 # Misc
 .DS_Store
 terraform/main_tf.backup
+
+recovered_sharadar/
+design.png
+
