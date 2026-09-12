@@ -17,6 +17,7 @@ type Series = {
 
 type Props = {
   series: Series[];
+  layout?: "combined" | "separate";
 };
 
 function compactNumber(value: number) {
@@ -63,11 +64,7 @@ function formatValue(value: number, format: string) {
   }
 }
 
-export default function FundamentalsChart({ series }: Props) {
-  if (!series.length) {
-    return null;
-  }
-
+function buildOption(series: Series[]) {
   const metricKeys = Array.from(
     new Set(series.map((s) => s.metric))
   );
@@ -75,29 +72,44 @@ export default function FundamentalsChart({ series }: Props) {
   const metric1 = metricKeys[0];
   const metric2 = metricKeys[1];
 
-  const metric1Series = series.find((s) => s.metric === metric1);
-  const metric2Series = series.find((s) => s.metric === metric2);
+  const metric1Series = series.find(
+    (s) => s.metric === metric1
+  );
+
+  const metric2Series = series.find(
+    (s) => s.metric === metric2
+  );
+
+  const useSecondAxis =
+    Boolean(metric2) &&
+    metric1Series?.format !== metric2Series?.format;
 
   const allDates = Array.from(
     new Set(
-      series.flatMap((s) => s.data.map((point) => point.date))
+      series.flatMap((s) =>
+        s.data.map((point) => point.date)
+      )
     )
   ).sort();
 
   const echartsSeries = series.map((s) => {
     const dataMap = new Map(
-      s.data.map((point) => [point.date, point.value])
+      s.data.map((point) => [
+        point.date,
+        point.value,
+      ])
     );
 
     return {
       name: `${s.ticker} — ${s.label}`,
       type: "line",
-      smooth: true,
+      smooth: false,
       showSymbol: true,
       symbol: "circle",
       symbolSize: 6,
 
-      yAxisIndex: s.metric === metric2 ? 1 : 0,
+      yAxisIndex:
+        useSecondAxis && s.metric === metric2 ? 1 : 0,
 
       data: allDates.map((date) => {
         const value = dataMap.get(date);
@@ -116,7 +128,7 @@ export default function FundamentalsChart({ series }: Props) {
     };
   });
 
-  const option = {
+  return {
     backgroundColor: "transparent",
 
     legend: {
@@ -137,7 +149,9 @@ export default function FundamentalsChart({ series }: Props) {
         const rows = params
           .map((p) => {
             const sourceSeries = series.find(
-              (s) => `${s.ticker} — ${s.label}` === p.seriesName
+              (s) =>
+                `${s.ticker} — ${s.label}` ===
+                p.seriesName
             );
 
             if (!sourceSeries || p.value == null) {
@@ -168,7 +182,7 @@ export default function FundamentalsChart({ series }: Props) {
 
     grid: {
       left: 85,
-      right: metric2 ? 85 : 30,
+      right: useSecondAxis ? 85 : 30,
       top: 70,
       bottom: 90,
     },
@@ -180,9 +194,8 @@ export default function FundamentalsChart({ series }: Props) {
 
       axisLabel: {
         color: "#94a3b8",
-        formatter: (value: string) => {
-          return value.substring(0, 4);
-        },
+        formatter: (value: string) =>
+          value.substring(0, 4),
       },
 
       axisLine: {
@@ -203,10 +216,12 @@ export default function FundamentalsChart({ series }: Props) {
 
         axisLabel: {
           color: "#94a3b8",
-
           formatter: (value: number) =>
             metric1Series
-              ? formatValue(value, metric1Series.format)
+              ? formatValue(
+                  value,
+                  metric1Series.format
+                )
               : value,
         },
 
@@ -219,7 +234,11 @@ export default function FundamentalsChart({ series }: Props) {
 
       {
         type: "value",
-        name: metric2Series?.label ?? "",
+        show: useSecondAxis,
+
+        name: useSecondAxis
+          ? metric2Series?.label ?? ""
+          : "",
 
         nameTextStyle: {
           color: "#94a3b8",
@@ -227,10 +246,12 @@ export default function FundamentalsChart({ series }: Props) {
 
         axisLabel: {
           color: "#94a3b8",
-
           formatter: (value: number) =>
             metric2Series
-              ? formatValue(value, metric2Series.format)
+              ? formatValue(
+                  value,
+                  metric2Series.format
+                )
               : value,
         },
 
@@ -246,7 +267,6 @@ export default function FundamentalsChart({ series }: Props) {
         zoomOnMouseWheel: true,
         moveOnMouseMove: true,
       },
-
       {
         type: "slider",
         bottom: 20,
@@ -255,11 +275,55 @@ export default function FundamentalsChart({ series }: Props) {
 
     series: echartsSeries,
   };
+}
+
+export default function FundamentalsChart({
+  series,
+  layout = "combined",
+}: Props) {
+  if (!series.length) {
+    return null;
+  }
+
+  if (layout === "separate") {
+    const tickers = Array.from(
+      new Set(series.map((s) => s.ticker))
+    );
+
+    return (
+      <div className="space-y-6">
+        {tickers.map((ticker) => {
+          const tickerSeries = series.filter(
+            (s) => s.ticker === ticker
+          );
+
+          return (
+            <div
+              key={ticker}
+              className="bg-slate-900 border border-slate-800 rounded-2xl p-6"
+            >
+              <h2 className="text-lg font-semibold mb-4">
+                {ticker}
+              </h2>
+
+              <ReactECharts
+                option={buildOption(tickerSeries)}
+                style={{
+                  width: "100%",
+                  height: "450px",
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
       <ReactECharts
-        option={option}
+        option={buildOption(series)}
         style={{
           width: "100%",
           height: "500px",

@@ -34,6 +34,10 @@ export default function Home() {
   const [basis, setBasis] = useState("Restated");
   const [range, setRange] = useState("10Y");
 
+  const [chartLayout, setChartLayout] = useState<
+    "combined" | "separate"
+  >("combined");
+
   const [tickers, setTickers] = useState<string[]>([]);
   const [metrics, setMetrics] = useState<MetricOption[]>([]);
 
@@ -277,7 +281,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Range buttons */}
+        {/* Range */}
         <div className="flex gap-2 mb-6">
           {["1Y", "3Y", "5Y", "10Y", "MAX"].map((r) => (
             <button
@@ -292,6 +296,31 @@ export default function Home() {
               {r}
             </button>
           ))}
+        </div>
+
+        {/* Chart layout */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setChartLayout("combined")}
+            className={`px-4 py-2 rounded-lg border ${
+              chartLayout === "combined"
+                ? "bg-white text-black border-white"
+                : "bg-slate-900 border-slate-700 text-slate-300"
+            }`}
+          >
+            Combined
+          </button>
+
+          <button
+            onClick={() => setChartLayout("separate")}
+            className={`px-4 py-2 rounded-lg border ${
+              chartLayout === "separate"
+                ? "bg-white text-black border-white"
+                : "bg-slate-900 border-slate-700 text-slate-300"
+            }`}
+          >
+            Separate by Company
+          </button>
         </div>
 
         <div className="mb-4 text-sm text-slate-500">
@@ -311,6 +340,7 @@ export default function Home() {
         ) : (
           <FundamentalsChart
             series={series}
+            layout={chartLayout}
           />
         )}
 
