@@ -15,34 +15,50 @@ type Series = {
   data: Point[];
 };
 
+type ChartLayout =
+  | "combined"
+  | "separate-company"
+  | "separate-metric";
+
 type Props = {
   series: Series[];
-  layout?: "combined" | "separate";
+  layout?: ChartLayout;
 };
 
 function compactNumber(value: number) {
   const abs = Math.abs(value);
 
   if (abs >= 1_000_000_000_000) {
-    return `${(value / 1_000_000_000_000).toFixed(1)}T`;
+    return `${(
+      value / 1_000_000_000_000
+    ).toFixed(1)}T`;
   }
 
   if (abs >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(1)}B`;
+    return `${(
+      value / 1_000_000_000
+    ).toFixed(1)}B`;
   }
 
   if (abs >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
+    return `${(
+      value / 1_000_000
+    ).toFixed(1)}M`;
   }
 
   if (abs >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}K`;
+    return `${(
+      value / 1_000
+    ).toFixed(1)}K`;
   }
 
   return value.toFixed(2);
 }
 
-function formatValue(value: number, format: string) {
+function formatValue(
+  value: number,
+  format: string
+) {
   switch (format) {
     case "currency":
       return `$${compactNumber(value)}`;
@@ -64,75 +80,125 @@ function formatValue(value: number, format: string) {
   }
 }
 
+function getAxisGroup(format: string) {
+  switch (format) {
+    case "currency":
+    case "currencyPerShare":
+      return "currency";
+
+    case "percent":
+      return "percent";
+
+    case "ratio":
+      return "ratio";
+
+    case "shares":
+      return "shares";
+
+    default:
+      return "number";
+  }
+}
+
 function buildOption(series: Series[]) {
-  const metricKeys = Array.from(
-    new Set(series.map((s) => s.metric))
-  );
-
-  const metric1 = metricKeys[0];
-  const metric2 = metricKeys[1];
-
-  const metric1Series = series.find(
-    (s) => s.metric === metric1
-  );
-
-  const metric2Series = series.find(
-    (s) => s.metric === metric2
-  );
-
-  const useSecondAxis =
-    Boolean(metric2) &&
-    metric1Series?.format !== metric2Series?.format;
-
   const allDates = Array.from(
     new Set(
-      series.flatMap((s) =>
-        s.data.map((point) => point.date)
+      series.flatMap((item) =>
+        item.data.map((point) => point.date)
       )
     )
   ).sort();
 
-  const echartsSeries = series.map((s) => {
-    const dataMap = new Map(
-      s.data.map((point) => [
-        point.date,
-        point.value,
-      ])
-    );
+  /*
+   * ECharts is easiest to read with a maximum
+   * of two Y axes.
+   *
+   * We therefore group metrics by format/unit and
+   * map the first group to the left axis and the
+   * second group to the right axis.
+   *
+   * Additional unit groups fall back to the left
+   * axis rather than creating 3-5 axes.
+   */
+  const axisGroups = Array.from(
+    new Set(
+      series.map((item) =>
+        getAxisGroup(item.format)
+      )
+    )
+  );
 
-    return {
-      name: `${s.ticker} — ${s.label}`,
-      type: "line",
-      smooth: false,
-      showSymbol: true,
-      symbol: "circle",
-      symbolSize: 6,
+  const leftAxisGroup = axisGroups[0];
+  const rightAxisGroup = axisGroups[1];
 
-      yAxisIndex:
-        useSecondAxis && s.metric === metric2 ? 1 : 0,
+  const useSecondAxis =
+    Boolean(rightAxisGroup);
 
-      data: allDates.map((date) => {
-        const value = dataMap.get(date);
-        return value ?? null;
-      }),
+  const leftAxisSeries = series.find(
+    (item) =>
+      getAxisGroup(item.format) ===
+      leftAxisGroup
+  );
 
-      lineStyle: {
-        width: 3,
-      },
+  const rightAxisSeries = series.find(
+    (item) =>
+      getAxisGroup(item.format) ===
+      rightAxisGroup
+  );
 
-      connectNulls: false,
+  const echartsSeries = series.map(
+    (item) => {
+      const dataMap = new Map(
+        item.data.map((point) => [
+          point.date,
+          point.value,
+        ])
+      );
 
-      emphasis: {
-        focus: "series",
-      },
-    };
-  });
+      const axisGroup = getAxisGroup(
+        item.format
+      );
+
+      return {
+        name: `${item.ticker} — ${item.label}`,
+        type: "line",
+        smooth: false,
+        showSymbol: true,
+        symbol: "circle",
+        symbolSize: 6,
+
+        yAxisIndex:
+          useSecondAxis &&
+          axisGroup === rightAxisGroup
+            ? 1
+            : 0,
+
+        data: allDates.map((date) => {
+          const value = dataMap.get(date);
+          return value ?? null;
+        }),
+
+        lineStyle: {
+          width: 3,
+        },
+
+        connectNulls: false,
+
+        emphasis: {
+          focus: "series",
+        },
+      };
+    }
+  );
 
   return {
     backgroundColor: "transparent",
 
     legend: {
       top: 0,
+
+      type: "scroll",
+
       textStyle: {
         color: "#cbd5e1",
       },
@@ -142,29 +208,36 @@ function buildOption(series: Series[]) {
       trigger: "axis",
 
       formatter: (params: any[]) => {
-        if (!params.length) return "";
+        if (!params.length) {
+          return "";
+        }
 
-        const date = params[0].axisValue;
+        const date =
+          params[0].axisValue;
 
         const rows = params
-          .map((p) => {
-            const sourceSeries = series.find(
-              (s) =>
-                `${s.ticker} — ${s.label}` ===
-                p.seriesName
-            );
+          .map((param) => {
+            const sourceSeries =
+              series.find(
+                (item) =>
+                  `${item.ticker} — ${item.label}` ===
+                  param.seriesName
+              );
 
-            if (!sourceSeries || p.value == null) {
+            if (
+              !sourceSeries ||
+              param.value == null
+            ) {
               return "";
             }
 
             return `
               <div style="margin-top:4px">
-                ${p.marker}
-                ${p.seriesName}:
+                ${param.marker}
+                ${param.seriesName}:
                 <strong>
                   ${formatValue(
-                    Number(p.value),
+                    Number(param.value),
                     sourceSeries.format
                   )}
                 </strong>
@@ -181,9 +254,9 @@ function buildOption(series: Series[]) {
     },
 
     grid: {
-      left: 85,
-      right: useSecondAxis ? 85 : 30,
-      top: 70,
+      left: 90,
+      right: useSecondAxis ? 90 : 30,
+      top: 80,
       bottom: 90,
     },
 
@@ -194,8 +267,10 @@ function buildOption(series: Series[]) {
 
       axisLabel: {
         color: "#94a3b8",
-        formatter: (value: string) =>
-          value.substring(0, 4),
+
+        formatter: (
+          value: string
+        ) => value.substring(0, 4),
       },
 
       axisLine: {
@@ -208,7 +283,9 @@ function buildOption(series: Series[]) {
     yAxis: [
       {
         type: "value",
-        name: metric1Series?.label ?? "",
+
+        name:
+          leftAxisSeries?.label ?? "",
 
         nameTextStyle: {
           color: "#94a3b8",
@@ -216,11 +293,14 @@ function buildOption(series: Series[]) {
 
         axisLabel: {
           color: "#94a3b8",
-          formatter: (value: number) =>
-            metric1Series
+
+          formatter: (
+            value: number
+          ) =>
+            leftAxisSeries
               ? formatValue(
                   value,
-                  metric1Series.format
+                  leftAxisSeries.format
                 )
               : value,
         },
@@ -234,10 +314,11 @@ function buildOption(series: Series[]) {
 
       {
         type: "value",
+
         show: useSecondAxis,
 
         name: useSecondAxis
-          ? metric2Series?.label ?? ""
+          ? rightAxisSeries?.label ?? ""
           : "",
 
         nameTextStyle: {
@@ -246,11 +327,14 @@ function buildOption(series: Series[]) {
 
         axisLabel: {
           color: "#94a3b8",
-          formatter: (value: number) =>
-            metric2Series
+
+          formatter: (
+            value: number
+          ) =>
+            rightAxisSeries
               ? formatValue(
                   value,
-                  metric2Series.format
+                  rightAxisSeries.format
                 )
               : value,
         },
@@ -267,6 +351,7 @@ function buildOption(series: Series[]) {
         zoomOnMouseWheel: true,
         moveOnMouseMove: true,
       },
+
       {
         type: "slider",
         bottom: 20,
@@ -277,6 +362,35 @@ function buildOption(series: Series[]) {
   };
 }
 
+function ChartCard({
+  title,
+  series,
+  height = 450,
+}: {
+  title?: string;
+  series: Series[];
+  height?: number;
+}) {
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+
+      {title && (
+        <h2 className="text-lg font-semibold mb-4">
+          {title}
+        </h2>
+      )}
+
+      <ReactECharts
+        option={buildOption(series)}
+        style={{
+          width: "100%",
+          height: `${height}px`,
+        }}
+      />
+    </div>
+  );
+}
+
 export default function FundamentalsChart({
   series,
   layout = "combined",
@@ -285,35 +399,68 @@ export default function FundamentalsChart({
     return null;
   }
 
-  if (layout === "separate") {
+  if (
+    layout === "separate-company"
+  ) {
     const tickers = Array.from(
-      new Set(series.map((s) => s.ticker))
+      new Set(
+        series.map(
+          (item) => item.ticker
+        )
+      )
     );
 
     return (
       <div className="space-y-6">
         {tickers.map((ticker) => {
-          const tickerSeries = series.filter(
-            (s) => s.ticker === ticker
-          );
+          const tickerSeries =
+            series.filter(
+              (item) =>
+                item.ticker === ticker
+            );
 
           return (
-            <div
+            <ChartCard
               key={ticker}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-6"
-            >
-              <h2 className="text-lg font-semibold mb-4">
-                {ticker}
-              </h2>
+              title={ticker}
+              series={tickerSeries}
+            />
+          );
+        })}
+      </div>
+    );
+  }
 
-              <ReactECharts
-                option={buildOption(tickerSeries)}
-                style={{
-                  width: "100%",
-                  height: "450px",
-                }}
-              />
-            </div>
+  if (
+    layout === "separate-metric"
+  ) {
+    const metrics = Array.from(
+      new Set(
+        series.map(
+          (item) => item.metric
+        )
+      )
+    );
+
+    return (
+      <div className="space-y-6">
+        {metrics.map((metric) => {
+          const metricSeries =
+            series.filter(
+              (item) =>
+                item.metric === metric
+            );
+
+          const title =
+            metricSeries[0]?.label ??
+            metric;
+
+          return (
+            <ChartCard
+              key={metric}
+              title={title}
+              series={metricSeries}
+            />
           );
         })}
       </div>
@@ -321,14 +468,9 @@ export default function FundamentalsChart({
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-      <ReactECharts
-        option={buildOption(series)}
-        style={{
-          width: "100%",
-          height: "500px",
-        }}
-      />
-    </div>
+    <ChartCard
+      series={series}
+      height={500}
+    />
   );
 }
