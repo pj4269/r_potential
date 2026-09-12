@@ -46,6 +46,9 @@ export default function Home() {
   const [basis, setBasis] = useState("Restated");
   const [range, setRange] = useState("10Y");
 
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   const [chartLayout, setChartLayout] =
     useState<ChartLayout>("combined");
 
@@ -65,14 +68,18 @@ export default function Home() {
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error ?? "Failed to load options");
+          throw new Error(
+            result.error ?? "Failed to load options"
+          );
         }
 
         setTickers(result.tickers ?? []);
         setMetrics(result.metrics ?? []);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to load options"
+          err instanceof Error
+            ? err.message
+            : "Failed to load options"
         );
       }
     }
@@ -101,6 +108,14 @@ export default function Home() {
           basis,
           range,
         });
+
+        if (startDate) {
+          params.set("startDate", startDate);
+        }
+
+        if (endDate) {
+          params.set("endDate", endDate);
+        }
 
         const response = await fetch(
           `/api/fundamentals?${params.toString()}`
@@ -135,6 +150,8 @@ export default function Home() {
     period,
     basis,
     range,
+    startDate,
+    endDate,
   ]);
 
   const filteredTickers = useMemo(() => {
@@ -211,6 +228,20 @@ export default function Home() {
         ?.label ?? metricValue
     );
   }
+
+  function chooseQuickRange(rangeOption: string) {
+    setRange(rangeOption);
+    setStartDate("");
+    setEndDate("");
+  }
+
+  function clearCustomRange() {
+    setStartDate("");
+    setEndDate("");
+    setRange("10Y");
+  }
+
+  const usingCustomRange = Boolean(startDate || endDate);
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-8">
@@ -396,16 +427,17 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Range */}
-        <div className="flex flex-wrap gap-2 mb-6">
+        {/* Quick Range */}
+        <div className="flex flex-wrap gap-2 mb-4">
           {["1Y", "3Y", "5Y", "10Y", "MAX"].map(
             (rangeOption) => (
               <button
                 key={rangeOption}
                 onClick={() =>
-                  setRange(rangeOption)
+                  chooseQuickRange(rangeOption)
                 }
                 className={`px-3 py-1.5 rounded-lg border ${
+                  !usingCustomRange &&
                   range === rangeOption
                     ? "bg-white text-black border-white"
                     : "bg-slate-900 border-slate-700 text-slate-300"
@@ -414,6 +446,50 @@ export default function Home() {
                 {rangeOption}
               </button>
             )
+          )}
+        </div>
+
+        {/* Custom Date Range */}
+        <div className="flex flex-wrap items-end gap-3 mb-6">
+          <div>
+            <label className="block text-xs text-slate-400 mb-2">
+              From
+            </label>
+
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setRange("CUSTOM");
+              }}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-400 mb-2">
+              To
+            </label>
+
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setRange("CUSTOM");
+              }}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2"
+            />
+          </div>
+
+          {usingCustomRange && (
+            <button
+              onClick={clearCustomRange}
+              className="px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-300"
+            >
+              Clear
+            </button>
           )}
         </div>
 
@@ -467,6 +543,15 @@ export default function Home() {
 
         <div className="mb-4 text-sm text-slate-500">
           {selectedTickers.join(" vs ")} · {dimension}
+
+          {usingCustomRange && (
+            <>
+              {" · "}
+              {startDate || "Beginning"}
+              {" → "}
+              {endDate || "Latest"}
+            </>
+          )}
         </div>
 
         {error && (
