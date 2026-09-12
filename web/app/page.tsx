@@ -1,0 +1,234 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import FundamentalsChart from "../components/FundamentalsChart";
+
+type ChartPoint = {
+  date: string;
+  value: number;
+};
+
+type MetricOption = {
+  label: string;
+  value: string;
+  format: string;
+};
+
+export default function Home() {
+  const [ticker, setTicker] = useState("AAPL");
+  const [tickerSearch, setTickerSearch] = useState("AAPL");
+
+  const [metric, setMetric] = useState("revenueusd");
+  const [period, setPeriod] = useState("Annual");
+  const [basis, setBasis] = useState("Restated");
+  const [range, setRange] = useState("10Y");
+
+  const [tickers, setTickers] = useState<string[]>([]);
+  const [metrics, setMetrics] = useState<MetricOption[]>([]);
+
+  const [data, setData] = useState<ChartPoint[]>([]);
+  const [dimension, setDimension] = useState("MRY");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function loadOptions() {
+      const response = await fetch("/api/options");
+      const result = await response.json();
+
+      setTickers(result.tickers ?? []);
+      setMetrics(result.metrics ?? []);
+    }
+
+    loadOptions();
+  }, []);
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+
+      const params = new URLSearchParams({
+        ticker,
+        metric,
+        period,
+        basis,
+        range,
+      });
+
+      const response = await fetch(
+        `/api/fundamentals?${params.toString()}`
+      );
+
+      const result = await response.json();
+
+      setData(result.data ?? []);
+      setDimension(result.dimension ?? "");
+
+      setLoading(false);
+    }
+
+    loadData();
+  }, [ticker, metric, period, basis, range]);
+
+  const filteredTickers = useMemo(() => {
+    const search = tickerSearch.toUpperCase();
+
+    return tickers
+      .filter((t) => t.includes(search))
+      .slice(0, 20);
+  }, [tickers, tickerSearch]);
+
+  const selectedMetric = useMemo(() => {
+    return metrics.find((m) => m.value === metric);
+  }, [metrics, metric]);
+
+  function chooseTicker(value: string) {
+    setTicker(value);
+    setTickerSearch(value);
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-white p-8">
+      <div className="max-w-6xl mx-auto">
+
+        <div className="mb-8">
+          <h1 className="text-3xl font-semibold">
+            Financial Fundamentals
+          </h1>
+
+          <p className="text-slate-400 mt-2">
+            Historical company fundamentals
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-4 mb-6">
+
+          {/* Company Search */}
+          <div className="relative">
+            <label className="block text-xs text-slate-400 mb-2">
+              Company
+            </label>
+
+            <input
+              value={tickerSearch}
+              onChange={(e) =>
+                setTickerSearch(e.target.value.toUpperCase())
+              }
+              className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 w-40"
+              placeholder="Search ticker"
+            />
+
+            {tickerSearch !== ticker && filteredTickers.length > 0 && (
+              <div className="absolute z-20 mt-1 w-40 max-h-64 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
+                {filteredTickers.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => chooseTicker(t)}
+                    className="block w-full text-left px-4 py-2 hover:bg-slate-800"
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Metric */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-2">
+              Metric
+            </label>
+
+            <select
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 min-w-56"
+            >
+              {metrics.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Period */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-2">
+              Period
+            </label>
+
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2"
+            >
+              <option value="Annual">Annual</option>
+              <option value="Quarterly">Quarterly</option>
+              <option value="TTM">TTM</option>
+            </select>
+          </div>
+
+          {/* Data Basis */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-2">
+              Data Basis
+            </label>
+
+            <select
+              value={basis}
+              onChange={(e) => setBasis(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2"
+            >
+              <option value="Restated">
+                Latest / Restated
+              </option>
+
+              <option value="As Reported">
+                As Reported
+              </option>
+            </select>
+          </div>
+        </div>
+
+        {/* Range buttons */}
+        <div className="flex gap-2 mb-6">
+          {["1Y", "3Y", "5Y", "10Y", "MAX"].map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`px-3 py-1.5 rounded-lg border ${
+                range === r
+                  ? "bg-white text-black border-white"
+                  : "bg-slate-900 border-slate-700 text-slate-300"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-4 text-sm text-slate-500">
+          {ticker} · {dimension}
+          {selectedMetric && ` · ${selectedMetric.label}`}
+        </div>
+
+        {loading ? (
+          <div className="text-slate-400">
+            Loading data...
+          </div>
+        ) : data.length === 0 ? (
+          <div className="text-slate-400">
+            No data available for this selection.
+          </div>
+        ) : (
+          <FundamentalsChart
+            ticker={ticker}
+            metric={selectedMetric?.label ?? metric}
+            data={data}
+          />
+        )}
+
+      </div>
+    </main>
+  );
+}
