@@ -17,3 +17,4 @@ terraform/main_tf.backup
 recovered_sharadar/
 design.png
 
+node_modules/

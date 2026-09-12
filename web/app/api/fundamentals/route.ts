@@ -13,27 +13,53 @@ const dimensionMap: Record<string, string> = {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
-  const ticker = (searchParams.get("ticker") ?? "AAPL").toUpperCase();
-  const metric = searchParams.get("metric") ?? "revenueusd";
+  const tickersParam = searchParams.get("tickers") ?? "AAPL";
+  const metricsParam = searchParams.get("metrics") ?? "revenueusd";
+
   const period = searchParams.get("period") ?? "Annual";
   const basis = searchParams.get("basis") ?? "Restated";
   const range = searchParams.get("range") ?? "10Y";
 
-  const metricConfig = metricMap[metric];
+  const tickers = tickersParam
+    .split(",")
+    .map((t) => t.trim().toUpperCase())
+    .filter(Boolean);
+
+  const metrics = metricsParam
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+
   const dimension = dimensionMap[`${period}-${basis}`];
 
-  if (
-    !metricConfig ||
-    !dimension ||
-    !/^[A-Z0-9.-]+$/.test(ticker)
-  ) {
+  if (!dimension) {
     return NextResponse.json(
-      { error: "Invalid parameters" },
+      { error: "Invalid period/basis" },
       { status: 400 }
     );
   }
 
-  const column = metricConfig.value;
+  if (
+    tickers.length === 0 ||
+    tickers.length > 5 ||
+    tickers.some((t) => !/^[A-Z0-9.-]+$/.test(t))
+  ) {
+    return NextResponse.json(
+      { error: "Invalid tickers" },
+      { status: 400 }
+    );
+  }
+
+  if (
+    metrics.length === 0 ||
+    metrics.length > 5 ||
+    metrics.some((m) => !metricMap[m])
+  ) {
+    return NextResponse.json(
+      { error: "Invalid metrics" },
+      { status: 400 }
+    );
+  }
 
   const rangeMap: Record<string, number | null> = {
     "1Y": 1,
@@ -50,16 +76,25 @@ export async function GET(request: NextRequest) {
       ? `AND calendardate >= add_months(current_date(), -${years * 12})`
       : "";
 
+  const tickerList = tickers.map((t) => `'${t}'`).join(", ");
+
+  const metricColumns = metrics
+    .map((m) => {
+      const column = metricMap[m].value;
+      return `${column} AS ${column}`;
+    })
+    .join(",\n      ");
+
   const sql = `
     SELECT
+      ticker,
       calendardate,
-      ${column} AS value
+      ${metricColumns}
     FROM r_potential_project.silver.sharadar_fundamentals_clean
-    WHERE ticker = '${ticker}'
+    WHERE ticker IN (${tickerList})
       AND dimension = '${dimension}'
-      AND ${column} IS NOT NULL
       ${dateFilter}
-    ORDER BY calendardate
+    ORDER BY ticker, calendardate
   `;
 
   const host = process.env.DATABRICKS_HOST;
@@ -92,8 +127,6 @@ export async function GET(request: NextRequest) {
     const result = await response.json();
 
     if (!response.ok) {
-      console.error("Databricks HTTP error:", result);
-
       return NextResponse.json(
         {
           error: "Databricks request failed",
@@ -115,25 +148,41 @@ export async function GET(request: NextRequest) {
 
     const rows = result.result?.data_array ?? [];
 
-    const data = rows.map((row: string[]) => ({
-      date: row[0],
-      value: Number(row[1]),
-    }));
+    const series = [];
+
+    for (let metricIndex = 0; metricIndex < metrics.length; metricIndex++) {
+      const metricKey = metrics[metricIndex];
+      const metricConfig = metricMap[metricKey];
+
+      for (const ticker of tickers) {
+        const data = rows
+          .filter((row: string[]) => row[0] === ticker)
+          .map((row: string[]) => ({
+            date: row[1],
+            value: Number(row[2 + metricIndex]),
+          }))
+          .filter((point: { value: number }) =>
+            Number.isFinite(point.value)
+          );
+
+        series.push({
+          ticker,
+          metric: metricKey,
+          label: metricConfig.label,
+          format: metricConfig.format,
+          data,
+        });
+      }
+    }
 
     return NextResponse.json({
-      ticker,
-
-      metric: {
-        label: metricConfig.label,
-        value: metricConfig.value,
-        format: metricConfig.format,
-      },
-
+      tickers,
+      metrics,
       period,
       basis,
       range,
       dimension,
-      data,
+      series,
     });
   } catch (error: unknown) {
     const message =

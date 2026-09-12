@@ -3,22 +3,33 @@
 import { useEffect, useMemo, useState } from "react";
 import FundamentalsChart from "../components/FundamentalsChart";
 
-type ChartPoint = {
-  date: string;
-  value: number;
-};
-
 type MetricOption = {
   label: string;
   value: string;
   format: string;
 };
 
-export default function Home() {
-  const [ticker, setTicker] = useState("AAPL");
-  const [tickerSearch, setTickerSearch] = useState("AAPL");
+type Series = {
+  ticker: string;
+  metric: string;
+  label: string;
+  format: string;
+  data: {
+    date: string;
+    value: number;
+  }[];
+};
 
-  const [metric, setMetric] = useState("revenueusd");
+export default function Home() {
+  const [ticker1, setTicker1] = useState("AAPL");
+  const [ticker2, setTicker2] = useState("MSFT");
+
+  const [tickerSearch1, setTickerSearch1] = useState("AAPL");
+  const [tickerSearch2, setTickerSearch2] = useState("MSFT");
+
+  const [metric1, setMetric1] = useState("revenueusd");
+  const [metric2, setMetric2] = useState("netinc");
+
   const [period, setPeriod] = useState("Annual");
   const [basis, setBasis] = useState("Restated");
   const [range, setRange] = useState("10Y");
@@ -26,7 +37,7 @@ export default function Home() {
   const [tickers, setTickers] = useState<string[]>([]);
   const [metrics, setMetrics] = useState<MetricOption[]>([]);
 
-  const [data, setData] = useState<ChartPoint[]>([]);
+  const [series, setSeries] = useState<Series[]>([]);
   const [dimension, setDimension] = useState("MRY");
   const [loading, setLoading] = useState(false);
 
@@ -47,8 +58,8 @@ export default function Home() {
       setLoading(true);
 
       const params = new URLSearchParams({
-        ticker,
-        metric,
+        tickers: `${ticker1},${ticker2}`,
+        metrics: `${metric1},${metric2}`,
         period,
         basis,
         range,
@@ -60,30 +71,55 @@ export default function Home() {
 
       const result = await response.json();
 
-      setData(result.data ?? []);
+      setSeries(result.series ?? []);
       setDimension(result.dimension ?? "");
 
       setLoading(false);
     }
 
     loadData();
-  }, [ticker, metric, period, basis, range]);
+  }, [
+    ticker1,
+    ticker2,
+    metric1,
+    metric2,
+    period,
+    basis,
+    range,
+  ]);
 
-  const filteredTickers = useMemo(() => {
-    const search = tickerSearch.toUpperCase();
+  const filteredTickers1 = useMemo(() => {
+    const search = tickerSearch1.toUpperCase();
 
     return tickers
       .filter((t) => t.includes(search))
       .slice(0, 20);
-  }, [tickers, tickerSearch]);
+  }, [tickers, tickerSearch1]);
 
-  const selectedMetric = useMemo(() => {
-    return metrics.find((m) => m.value === metric);
-  }, [metrics, metric]);
+  const filteredTickers2 = useMemo(() => {
+    const search = tickerSearch2.toUpperCase();
 
-  function chooseTicker(value: string) {
-    setTicker(value);
-    setTickerSearch(value);
+    return tickers
+      .filter((t) => t.includes(search))
+      .slice(0, 20);
+  }, [tickers, tickerSearch2]);
+
+  const selectedMetric1 = useMemo(() => {
+    return metrics.find((m) => m.value === metric1);
+  }, [metrics, metric1]);
+
+  const selectedMetric2 = useMemo(() => {
+    return metrics.find((m) => m.value === metric2);
+  }, [metrics, metric2]);
+
+  function chooseTicker1(value: string) {
+    setTicker1(value);
+    setTickerSearch1(value);
+  }
+
+  function chooseTicker2(value: string) {
+    setTicker2(value);
+    setTickerSearch2(value);
   }
 
   return (
@@ -96,51 +132,102 @@ export default function Home() {
           </h1>
 
           <p className="text-slate-400 mt-2">
-            Historical company fundamentals
+            Compare companies and financial metrics over time
           </p>
         </div>
 
         <div className="flex flex-wrap gap-4 mb-6">
 
-          {/* Company Search */}
+          {/* Company 1 */}
           <div className="relative">
             <label className="block text-xs text-slate-400 mb-2">
-              Company
+              Company 1
             </label>
 
             <input
-              value={tickerSearch}
+              value={tickerSearch1}
               onChange={(e) =>
-                setTickerSearch(e.target.value.toUpperCase())
+                setTickerSearch1(e.target.value.toUpperCase())
               }
               className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 w-40"
               placeholder="Search ticker"
             />
 
-            {tickerSearch !== ticker && filteredTickers.length > 0 && (
-              <div className="absolute z-20 mt-1 w-40 max-h-64 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
-                {filteredTickers.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => chooseTicker(t)}
-                    className="block w-full text-left px-4 py-2 hover:bg-slate-800"
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
+            {tickerSearch1 !== ticker1 &&
+              filteredTickers1.length > 0 && (
+                <div className="absolute z-20 mt-1 w-40 max-h-64 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
+                  {filteredTickers1.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => chooseTicker1(t)}
+                      className="block w-full text-left px-4 py-2 hover:bg-slate-800"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
           </div>
 
-          {/* Metric */}
+          {/* Company 2 */}
+          <div className="relative">
+            <label className="block text-xs text-slate-400 mb-2">
+              Compare With
+            </label>
+
+            <input
+              value={tickerSearch2}
+              onChange={(e) =>
+                setTickerSearch2(e.target.value.toUpperCase())
+              }
+              className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 w-40"
+              placeholder="Search ticker"
+            />
+
+            {tickerSearch2 !== ticker2 &&
+              filteredTickers2.length > 0 && (
+                <div className="absolute z-20 mt-1 w-40 max-h-64 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
+                  {filteredTickers2.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => chooseTicker2(t)}
+                      className="block w-full text-left px-4 py-2 hover:bg-slate-800"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+          </div>
+
+          {/* Metric 1 */}
           <div>
             <label className="block text-xs text-slate-400 mb-2">
-              Metric
+              Metric 1
             </label>
 
             <select
-              value={metric}
-              onChange={(e) => setMetric(e.target.value)}
+              value={metric1}
+              onChange={(e) => setMetric1(e.target.value)}
+              className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 min-w-56"
+            >
+              {metrics.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Metric 2 */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-2">
+              Metric 2
+            </label>
+
+            <select
+              value={metric2}
+              onChange={(e) => setMetric2(e.target.value)}
               className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 min-w-56"
             >
               {metrics.map((m) => (
@@ -208,23 +295,22 @@ export default function Home() {
         </div>
 
         <div className="mb-4 text-sm text-slate-500">
-          {ticker} · {dimension}
-          {selectedMetric && ` · ${selectedMetric.label}`}
+          {ticker1} vs {ticker2} · {dimension}
+          {selectedMetric1 && ` · ${selectedMetric1.label}`}
+          {selectedMetric2 && ` + ${selectedMetric2.label}`}
         </div>
 
         {loading ? (
           <div className="text-slate-400">
             Loading data...
           </div>
-        ) : data.length === 0 ? (
+        ) : series.length === 0 ? (
           <div className="text-slate-400">
             No data available for this selection.
           </div>
         ) : (
           <FundamentalsChart
-            ticker={ticker}
-            metric={selectedMetric?.label ?? metric}
-            data={data}
+            series={series}
           />
         )}
 
