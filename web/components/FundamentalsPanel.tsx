@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import FundamentalsChart from "./FundamentalsChart";
-import { marketMetrics } from "../lib/marketMetrics";
+
+type MetricOption = {
+  label: string;
+  value: string;
+  format: string;
+};
 
 type Series = {
   ticker: string;
@@ -23,20 +28,23 @@ type ChartLayout =
 const MAX_TICKERS = 5;
 const MAX_METRICS = 5;
 
-export default function MarketDataPanel() {
+export default function FundamentalsPanel() {
   const [selectedTickers, setSelectedTickers] = useState<string[]>([
     "AAPL",
+    "MSFT",
   ]);
 
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
-    "closeadj",
-    "1y_return",
+    "revenueusd",
+    "netinc",
   ]);
 
   const [tickerSearch, setTickerSearch] = useState("");
   const [metricToAdd, setMetricToAdd] = useState("");
 
-  const [range, setRange] = useState("3Y");
+  const [period, setPeriod] = useState("Annual");
+  const [basis, setBasis] = useState("Restated");
+  const [range, setRange] = useState("10Y");
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -45,14 +53,13 @@ export default function MarketDataPanel() {
     useState<ChartLayout>("combined");
 
   const [tickers, setTickers] = useState<string[]>([]);
+  const [metrics, setMetrics] = useState<MetricOption[]>([]);
+
   const [series, setSeries] = useState<Series[]>([]);
+  const [dimension, setDimension] = useState("MRY");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  // ------------------------------------------------
-  // Load available ticker options
-  // ------------------------------------------------
 
   useEffect(() => {
     async function loadOptions() {
@@ -67,6 +74,7 @@ export default function MarketDataPanel() {
         }
 
         setTickers(result.tickers ?? []);
+        setMetrics(result.metrics ?? []);
       } catch (err) {
         setError(
           err instanceof Error
@@ -78,10 +86,6 @@ export default function MarketDataPanel() {
 
     loadOptions();
   }, []);
-
-  // ------------------------------------------------
-  // Load market data
-  // ------------------------------------------------
 
   useEffect(() => {
     async function loadData() {
@@ -100,6 +104,8 @@ export default function MarketDataPanel() {
         const params = new URLSearchParams({
           tickers: selectedTickers.join(","),
           metrics: selectedMetrics.join(","),
+          period,
+          basis,
           range,
         });
 
@@ -112,25 +118,26 @@ export default function MarketDataPanel() {
         }
 
         const response = await fetch(
-          `/api/market-data?${params.toString()}`
+          `/api/fundamentals?${params.toString()}`
         );
 
         const result = await response.json();
 
         if (!response.ok) {
           throw new Error(
-            result.error ?? "Failed to load market data"
+            result.error ?? "Failed to load fundamentals"
           );
         }
 
         setSeries(result.series ?? []);
+        setDimension(result.dimension ?? "");
       } catch (err) {
         setSeries([]);
 
         setError(
           err instanceof Error
             ? err.message
-            : "Failed to load market data"
+            : "Failed to load fundamentals"
         );
       } finally {
         setLoading(false);
@@ -141,14 +148,12 @@ export default function MarketDataPanel() {
   }, [
     selectedTickers,
     selectedMetrics,
+    period,
+    basis,
     range,
     startDate,
     endDate,
   ]);
-
-  // ------------------------------------------------
-  // Search / filter helpers
-  // ------------------------------------------------
 
   const filteredTickers = useMemo(() => {
     const search = tickerSearch.trim().toUpperCase();
@@ -167,15 +172,10 @@ export default function MarketDataPanel() {
   }, [tickers, tickerSearch, selectedTickers]);
 
   const availableMetrics = useMemo(() => {
-    return marketMetrics.filter(
-      (metric) =>
-        !selectedMetrics.includes(metric.value)
+    return metrics.filter(
+      (metric) => !selectedMetrics.includes(metric.value)
     );
-  }, [selectedMetrics]);
-
-  // ------------------------------------------------
-  // Companies
-  // ------------------------------------------------
+  }, [metrics, selectedMetrics]);
 
   function addTicker(ticker: string) {
     if (selectedTickers.length >= MAX_TICKERS) {
@@ -186,25 +186,15 @@ export default function MarketDataPanel() {
       return;
     }
 
-    setSelectedTickers((current) => [
-      ...current,
-      ticker,
-    ]);
-
+    setSelectedTickers((current) => [...current, ticker]);
     setTickerSearch("");
   }
 
   function removeTicker(ticker: string) {
     setSelectedTickers((current) =>
-      current.filter(
-        (item) => item !== ticker
-      )
+      current.filter((item) => item !== ticker)
     );
   }
-
-  // ------------------------------------------------
-  // Metrics
-  // ------------------------------------------------
 
   function addMetric() {
     if (!metricToAdd) {
@@ -229,24 +219,16 @@ export default function MarketDataPanel() {
 
   function removeMetric(metric: string) {
     setSelectedMetrics((current) =>
-      current.filter(
-        (item) => item !== metric
-      )
+      current.filter((item) => item !== metric)
     );
   }
 
   function metricLabel(metricValue: string) {
     return (
-      marketMetrics.find(
-        (metric) =>
-          metric.value === metricValue
-      )?.label ?? metricValue
+      metrics.find((metric) => metric.value === metricValue)
+        ?.label ?? metricValue
     );
   }
-
-  // ------------------------------------------------
-  // Range helpers
-  // ------------------------------------------------
 
   function chooseQuickRange(rangeOption: string) {
     setRange(rangeOption);
@@ -257,16 +239,10 @@ export default function MarketDataPanel() {
   function clearCustomRange() {
     setStartDate("");
     setEndDate("");
-    setRange("3Y");
+    setRange("10Y");
   }
 
-  const usingCustomRange = Boolean(
-    startDate || endDate
-  );
-
-  // ------------------------------------------------
-  // Render
-  // ------------------------------------------------
+  const usingCustomRange = Boolean(startDate || endDate);
 
   return (
     <section className="w-full">
@@ -275,11 +251,11 @@ export default function MarketDataPanel() {
         <aside className="w-full xl:w-[340px] shrink-0 border-r border-slate-800 px-6 py-6">
           <div className="mb-8">
             <h2 className="text-xl font-semibold">
-              Market Data
+              Fundamentals
             </h2>
 
             <p className="text-sm text-slate-500 mt-1">
-              Compare adjusted prices and returns over time
+              Compare company fundamentals over time
             </p>
           </div>
 
@@ -304,9 +280,7 @@ export default function MarketDataPanel() {
                   <span>{ticker}</span>
 
                   <button
-                    onClick={() =>
-                      removeTicker(ticker)
-                    }
+                    onClick={() => removeTicker(ticker)}
                     className="text-slate-500 hover:text-white"
                     aria-label={`Remove ${ticker}`}
                   >
@@ -316,8 +290,7 @@ export default function MarketDataPanel() {
               ))}
             </div>
 
-            {selectedTickers.length <
-              MAX_TICKERS && (
+            {selectedTickers.length < MAX_TICKERS && (
               <div className="relative">
                 <input
                   value={tickerSearch}
@@ -332,19 +305,15 @@ export default function MarketDataPanel() {
 
                 {filteredTickers.length > 0 && (
                   <div className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
-                    {filteredTickers.map(
-                      (ticker) => (
-                        <button
-                          key={ticker}
-                          onClick={() =>
-                            addTicker(ticker)
-                          }
-                          className="block w-full text-left px-4 py-2 hover:bg-slate-800"
-                        >
-                          {ticker}
-                        </button>
-                      )
-                    )}
+                    {filteredTickers.map((ticker) => (
+                      <button
+                        key={ticker}
+                        onClick={() => addTicker(ticker)}
+                        className="block w-full text-left px-4 py-2 hover:bg-slate-800"
+                      >
+                        {ticker}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -374,13 +343,9 @@ export default function MarketDataPanel() {
                   </span>
 
                   <button
-                    onClick={() =>
-                      removeMetric(metric)
-                    }
+                    onClick={() => removeMetric(metric)}
                     className="text-slate-500 hover:text-white"
-                    aria-label={`Remove ${metricLabel(
-                      metric
-                    )}`}
+                    aria-label={`Remove ${metricLabel(metric)}`}
                   >
                     ×
                   </button>
@@ -388,32 +353,25 @@ export default function MarketDataPanel() {
               ))}
             </div>
 
-            {selectedMetrics.length <
-              MAX_METRICS && (
+            {selectedMetrics.length < MAX_METRICS && (
               <div className="space-y-2">
                 <select
                   value={metricToAdd}
                   onChange={(e) =>
-                    setMetricToAdd(
-                      e.target.value
-                    )
+                    setMetricToAdd(e.target.value)
                   }
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2"
                 >
-                  <option value="">
-                    + Add metric
-                  </option>
+                  <option value="">+ Add metric</option>
 
-                  {availableMetrics.map(
-                    (metric) => (
-                      <option
-                        key={metric.value}
-                        value={metric.value}
-                      >
-                        {metric.label}
-                      </option>
-                    )
-                  )}
+                  {availableMetrics.map((metric) => (
+                    <option
+                      key={metric.value}
+                      value={metric.value}
+                    >
+                      {metric.label}
+                    </option>
+                  ))}
                 </select>
 
                 <button
@@ -427,6 +385,57 @@ export default function MarketDataPanel() {
             )}
           </section>
 
+          {/* Fundamentals Controls */}
+          <section className="mb-8">
+            <div className="text-xs uppercase tracking-wide text-slate-400 mb-3">
+              Fundamentals
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">
+                  Period
+                </label>
+
+                <select
+                  value={period}
+                  onChange={(e) =>
+                    setPeriod(e.target.value)
+                  }
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2"
+                >
+                  <option value="Annual">Annual</option>
+                  <option value="Quarterly">
+                    Quarterly
+                  </option>
+                  <option value="TTM">TTM</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">
+                  Data Basis
+                </label>
+
+                <select
+                  value={basis}
+                  onChange={(e) =>
+                    setBasis(e.target.value)
+                  }
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2"
+                >
+                  <option value="Restated">
+                    Latest / Restated
+                  </option>
+
+                  <option value="As Reported">
+                    As Reported
+                  </option>
+                </select>
+              </div>
+            </div>
+          </section>
+
           {/* Date Range */}
           <section>
             <div className="text-xs uppercase tracking-wide text-slate-400 mb-3">
@@ -434,30 +443,24 @@ export default function MarketDataPanel() {
             </div>
 
             <div className="flex flex-wrap gap-2 mb-4">
-              {[
-                "1Y",
-                "3Y",
-                "5Y",
-                "10Y",
-                "MAX",
-              ].map((rangeOption) => (
-                <button
-                  key={rangeOption}
-                  onClick={() =>
-                    chooseQuickRange(
-                      rangeOption
-                    )
-                  }
-                  className={`px-3 py-1.5 rounded-lg border text-sm ${
-                    !usingCustomRange &&
-                    range === rangeOption
-                      ? "bg-white text-black border-white"
-                      : "bg-slate-900 border-slate-700 text-slate-300"
-                  }`}
-                >
-                  {rangeOption}
-                </button>
-              ))}
+              {["1Y", "3Y", "5Y", "10Y", "MAX"].map(
+                (rangeOption) => (
+                  <button
+                    key={rangeOption}
+                    onClick={() =>
+                      chooseQuickRange(rangeOption)
+                    }
+                    className={`px-3 py-1.5 rounded-lg border text-sm ${
+                      !usingCustomRange &&
+                      range === rangeOption
+                        ? "bg-white text-black border-white"
+                        : "bg-slate-900 border-slate-700 text-slate-300"
+                    }`}
+                  >
+                    {rangeOption}
+                  </button>
+                )
+              )}
             </div>
 
             <div className="space-y-3">
@@ -470,9 +473,7 @@ export default function MarketDataPanel() {
                   type="date"
                   value={startDate}
                   onChange={(e) => {
-                    setStartDate(
-                      e.target.value
-                    );
+                    setStartDate(e.target.value);
                     setRange("CUSTOM");
                   }}
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2"
@@ -488,9 +489,7 @@ export default function MarketDataPanel() {
                   type="date"
                   value={endDate}
                   onChange={(e) => {
-                    setEndDate(
-                      e.target.value
-                    );
+                    setEndDate(e.target.value);
                     setRange("CUSTOM");
                   }}
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2"
@@ -499,9 +498,7 @@ export default function MarketDataPanel() {
 
               {usingCustomRange && (
                 <button
-                  onClick={
-                    clearCustomRange
-                  }
+                  onClick={clearCustomRange}
                   className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-300"
                 >
                   Clear Custom Range
@@ -515,11 +512,11 @@ export default function MarketDataPanel() {
         <main className="flex-1 min-w-0 px-6 py-6">
           <div className="mb-5">
             <h1 className="text-2xl font-semibold">
-              Market Data
+              Financial Fundamentals
             </h1>
 
             <p className="text-sm text-slate-500 mt-1">
-              Adjusted prices and rolling returns
+              Compare companies and financial metrics over time
             </p>
           </div>
 
@@ -532,13 +529,10 @@ export default function MarketDataPanel() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() =>
-                  setChartLayout(
-                    "combined"
-                  )
+                  setChartLayout("combined")
                 }
                 className={`px-4 py-2 rounded-lg border ${
-                  chartLayout ===
-                  "combined"
+                  chartLayout === "combined"
                     ? "bg-white text-black border-white"
                     : "bg-slate-900 border-slate-700 text-slate-300"
                 }`}
@@ -548,13 +542,10 @@ export default function MarketDataPanel() {
 
               <button
                 onClick={() =>
-                  setChartLayout(
-                    "separate-company"
-                  )
+                  setChartLayout("separate-company")
                 }
                 className={`px-4 py-2 rounded-lg border ${
-                  chartLayout ===
-                  "separate-company"
+                  chartLayout === "separate-company"
                     ? "bg-white text-black border-white"
                     : "bg-slate-900 border-slate-700 text-slate-300"
                 }`}
@@ -564,13 +555,10 @@ export default function MarketDataPanel() {
 
               <button
                 onClick={() =>
-                  setChartLayout(
-                    "separate-metric"
-                  )
+                  setChartLayout("separate-metric")
                 }
                 className={`px-4 py-2 rounded-lg border ${
-                  chartLayout ===
-                  "separate-metric"
+                  chartLayout === "separate-metric"
                     ? "bg-white text-black border-white"
                     : "bg-slate-900 border-slate-700 text-slate-300"
                 }`}
@@ -581,7 +569,7 @@ export default function MarketDataPanel() {
           </div>
 
           <div className="mb-4 text-sm text-slate-500">
-            {selectedTickers.join(" vs ")}
+            {selectedTickers.join(" vs ")} · {dimension}
 
             {usingCustomRange && (
               <>
@@ -602,7 +590,7 @@ export default function MarketDataPanel() {
           <div className="min-h-[650px]">
             {loading ? (
               <div className="h-[600px] rounded-xl border border-slate-800 bg-slate-900/30 flex items-center justify-center text-slate-400">
-                Loading market data...
+                Loading fundamentals...
               </div>
             ) : selectedTickers.length === 0 ? (
               <div className="h-[600px] rounded-xl border border-slate-800 bg-slate-900/30 flex items-center justify-center text-slate-400">
@@ -614,7 +602,7 @@ export default function MarketDataPanel() {
               </div>
             ) : series.length === 0 ? (
               <div className="h-[600px] rounded-xl border border-slate-800 bg-slate-900/30 flex items-center justify-center text-slate-400">
-                No market data available for this selection.
+                No data available for this selection.
               </div>
             ) : (
               <FundamentalsChart
