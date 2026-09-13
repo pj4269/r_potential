@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import FundamentalsChart from "../components/FundamentalsChart";
+import MarketDataPanel from "../components/MarketDataPanel";
 
 type MetricOption = {
   label: string;
@@ -582,6 +583,8 @@ export default function Home() {
             layout={chartLayout}
           />
         )}
+
+        <MarketDataPanel />
 
       </div>
     </main>
